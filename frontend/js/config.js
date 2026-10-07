@@ -38,7 +38,13 @@ function renderParams() {
   el("fParams").innerHTML = params.map((p) => paramInput(p, cfg[p.key])).join("");
   el("fParams").querySelectorAll('input[type="range"]').forEach((r) => {
     const lab = r.parentElement.querySelector(".range-val");
-    r.oninput = () => { lab.textContent = fmt(parseFloat(r.value)); };
+    r.oninput = () => {
+      lab.textContent = fmt(parseFloat(r.value));
+      if (typeof schedulePreviewRefresh === "function") schedulePreviewRefresh();
+    };
+  });
+  el("fParams").querySelectorAll("select[data-key],input[data-type='bool']").forEach((inp) => {
+    inp.onchange = () => { if (typeof schedulePreviewRefresh === "function") schedulePreviewRefresh(); };
   });
 }
 
@@ -136,7 +142,7 @@ async function reloadScenes() {
 }
 
 function editScene(id) {
-  get(`/api/scenes/${id}`).then((s) => {
+  get(`/api/scenes/${id}`).then(async (s) => {
     cur = s;
     itvs = (s.interventions || []).map((i) => ({ type: i.type, at_step: i.at_step || 0, params: i.params || {} }));
     el("formTitle").textContent = "编辑场景 · " + s.name;
@@ -147,12 +153,31 @@ function editScene(id) {
     el("fDesc").value = s.description;
     renderParams();
     renderInterventions();
+    await hydrateInitialState(s);
     document.querySelectorAll(".list-item").forEach((li) =>
       li.classList.toggle("selected", li.dataset.id === id));
   });
 }
 
-function newScene() {
+/* Restore the deterministic initial-state section from a saved scene: fill the
+ * text box with its JSON and rebuild the same preview the run will produce. */
+async function hydrateInitialState(s) {
+  const eEls = (typeof initEls === "function") ? initEls() : null;
+  resetInitialState();
+  await refreshInitialHint(s.domain, s.model);
+  if (!eEls) return;
+  if (s.initial_state && s.initial_state.length) {
+    eEls.text.value = JSON.stringify({ individuals: s.initial_state }, null, 2);
+    eEls.fmt.value = "json";
+    const ok = await importLayout(s.domain, s.model, collectParams(el("fParams")));
+    if (!ok) eEls.summary.textContent = "已保存的初始态在当前参数下未通过校验，请修正后重新导入。";
+  } else {
+    eEls.text.value = "";
+    eEls.file.value = "";
+  }
+}
+
+async function newScene() {
   cur = null;
   itvs = [];
   el("formTitle").textContent = "新建场景";
@@ -162,6 +187,8 @@ function newScene() {
   renderModels();
   renderParams();
   renderInterventions();
+  if (typeof resetInitialState === "function") resetInitialState();
+  if (typeof refreshInitialHint === "function") refreshInitialHint(domain(), model());
   document.querySelectorAll(".list-item").forEach((li) => li.classList.remove("selected"));
 }
 
@@ -174,6 +201,7 @@ function currentSceneObject() {
     description: el("fDesc").value,
     config: collectParams(el("fParams")),
     interventions: collectInterventions(),
+    initial_state: currentLayout(),
   };
 }
 
@@ -187,15 +215,27 @@ async function saveScene() {
     setTimeout(() => el("formStatus").textContent = "", 2000);
     await reloadScenes();
     return saved;
-  } catch (e) { alert("保存失败：" + e.message); }
+  } catch (e) {
+    if (typeof showInitialStateSaveErrors === "function"
+        && showInitialStateSaveErrors(e)) return;
+    alert("保存失败：" + e.message);
+  }
 }
 
 async function init() {
   const { domains, order } = await get("/api/catalog");
   CATALOG = domains;
   el("fDomain").innerHTML = order.map((d) => `<option value="${d}">${esc(domains[d].label)}</option>`).join("");
-  el("fDomain").onchange = () => { renderModels(); renderParams(); renderInterventions(); };
-  el("fModel").onchange = () => renderParams();
+  el("fDomain").onchange = () => {
+    renderModels(); renderParams(); renderInterventions();
+    if (typeof resetInitialState === "function") resetInitialState();
+    if (typeof refreshInitialHint === "function") refreshInitialHint(domain(), model());
+  };
+  el("fModel").onchange = () => {
+    renderParams();
+    if (typeof resetInitialState === "function") resetInitialState();
+    if (typeof refreshInitialHint === "function") refreshInitialHint(domain(), model());
+  };
   el("newScene").onclick = newScene;
   el("addItv").onclick = () => { itvs.push({ type: CATALOG[domain()].interventions[0].type, at_step: 0, params: {} }); renderInterventions(); };
   el("saveScene").onclick = saveScene;
@@ -207,6 +247,15 @@ async function init() {
       window.location.href = `/visualize.html?run=${run.id}`;
     } catch (e) { alert("创建运行失败：" + e.message); }
   };
+
+  // Deterministic initial-state import section.
+  if (typeof registerInitialStateContext === "function") {
+    registerInitialStateContext(() => collectParams(el("fParams")),
+                                () => ({ domain: domain(), model: model() }));
+    bindInitialState();
+    refreshInitialHint(domain(), model());
+  }
+
   await reloadScenes();
   newScene();
   const qs = new URLSearchParams(window.location.search).get("scene");

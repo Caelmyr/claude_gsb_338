@@ -27,12 +27,18 @@ class Engine(ABC):
     model: str = ""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None,
-                 seed: Optional[int] = None) -> None:
+                 seed: Optional[int] = None,
+                 initial_state: Optional[List[Dict[str, Any]]] = None) -> None:
         # Merge the concrete class defaults with the caller-supplied config.
         self.config: Dict[str, Any] = {**self.defaults(), **(config or {})}
         self.rng: random.Random = random.Random(seed)
         self.step_count: int = 0
         self._individuals: List[Dict[str, Any]] = []
+        # A deterministic, pre-validated initial layout replaces the random
+        # population that ``_init`` would otherwise draw from density/count.
+        # Stored verbatim so ``reset`` reproduces the exact same initial state.
+        self._initial_state: Optional[List[Dict[str, Any]]] = (
+            [dict(ind) for ind in initial_state] if initial_state else None)
         self._init()
 
     # ------------------------------------------------------------------ #
@@ -43,9 +49,19 @@ class Engine(ABC):
         """Fallback defaults; the catalog supplies richer ones at call time."""
         return {}
 
+    @property
+    def has_initial_state(self) -> bool:
+        """True when a deterministic imported layout replaces random seeding."""
+        return self._initial_state is not None
+
     @abstractmethod
     def _init(self) -> None:
-        """Initialise state from ``self.config``."""
+        """Initialise state from ``self.config``.
+
+        Subclasses should check ``self._initial_state`` first: when present it
+        is a pre-validated canonical layout and must be used verbatim instead
+        of drawing a random population, so the initial state is reproducible.
+        """
 
     @abstractmethod
     def step(self) -> None:

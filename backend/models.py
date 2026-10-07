@@ -27,6 +27,10 @@ class Scene:
     description: str = ""
     config: Dict[str, Any] = field(default_factory=dict)
     interventions: List[Dict[str, Any]] = field(default_factory=list)
+    # Optional deterministic initial population (validated canonical rows).
+    # When present it replaces the engine's random density/count seeding, so
+    # the layout is fully reproducible; None / [] means "generate randomly".
+    initial_state: Optional[List[Dict[str, Any]]] = None
     created_at: str = ""
     updated_at: str = ""
 
@@ -39,12 +43,14 @@ class Scene:
             "description": self.description,
             "config": self.config,
             "interventions": self.interventions,
+            "initial_state": self.initial_state,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Scene":
+        layout = data.get("initial_state")
         scene = cls(
             id=str(data.get("id", "")),
             name=str(data.get("name", "未命名场景")),
@@ -53,6 +59,7 @@ class Scene:
             description=str(data.get("description", "")),
             config=dict(data.get("config") or {}),
             interventions=list(data.get("interventions") or []),
+            initial_state=[dict(r) for r in layout] if layout else None,
             created_at=str(data.get("created_at", "")),
             updated_at=str(data.get("updated_at", "")),
         )
@@ -120,7 +127,27 @@ def validate_scene(scene: Scene) -> List[str]:
     # Merge defaults first so validation only flags genuinely bad values.
     defaults = catalog.model_defaults(scene.domain, scene.model)
     merged = {**defaults, **scene.config}
+
+    # A deterministic initial layout fixes the population itself; re-validate
+    # the stored rows and let their implied counts (density/n/...) win over the
+    # parameter form so later range checks cannot contradict the layout.
+    layout_keys: set = set()
+    if scene.initial_state:
+        from . import initial_state
+        result = initial_state.validate_layout(
+            scene.domain, scene.model, scene.initial_state, merged)
+        if not result.ok:
+            errors.extend(f"初始态：{e}" for e in result.errors)
+        else:
+            merged.update(result.config_updates)
+            scene.config = {**scene.config, **result.config_updates}
+            layout_keys = set(result.config_updates)
+
     for spec in catalog.model_params(scene.domain, scene.model):
+        # Counts/density derived from an imported layout may legitimately lie
+        # outside the random-seeding slider range; don't range-check those.
+        if spec["key"] in layout_keys:
+            continue
         value = merged.get(spec["key"])
         if spec["type"] in ("int", "float") and value is not None:
             try:

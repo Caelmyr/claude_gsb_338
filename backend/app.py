@@ -12,9 +12,10 @@ import os
 import threading
 from typing import Any, Dict
 
-from flask import Flask, jsonify, request, send_file, send_from_directory
+from flask import Flask, jsonify, request, Response, send_file, send_from_directory
 
 from . import catalog, export, models, report, storage, util
+from . import initial_state
 from .run_manager import manager
 
 FRONTEND_DIR = os.path.join(
@@ -111,6 +112,95 @@ def create_app() -> Flask:
         return jsonify({"deleted": scene_id})
 
     # ------------------------------------------------------------------ #
+    # Initial-state import (deterministic layouts)
+    # ------------------------------------------------------------------ #
+    def _dm_from_payload(data: Dict[str, Any]):
+        """Resolve (domain, model, config) from an import/preview payload."""
+        domain = str(data.get("domain", ""))
+        model = str(data.get("model", ""))
+        if not catalog.known_model(domain, model):
+            return None, None, None
+        return domain, model, data.get("config") or {}
+
+    @app.route("/api/initial-state/fields")
+    def initial_state_fields():
+        domain = request.args.get("domain", "")
+        model = request.args.get("model", "")
+        if not catalog.known_model(domain, model):
+            return _err(ValueError(f"未知模型: {domain}/{model}"), 404)
+        return jsonify({"domain": domain, "model": model,
+                        "hint": initial_state.HINTS[f"{domain}/{model}"],
+                        "fields": initial_state.field_metadata(domain, model),
+                        "defaults": catalog.model_defaults(domain, model)})
+
+    @app.route("/api/initial-state/template")
+    def initial_state_template():
+        domain = request.args.get("domain", "")
+        model = request.args.get("model", "")
+        fmt = request.args.get("format", "csv")
+        if not catalog.known_model(domain, model):
+            return _err(ValueError(f"未知模型: {domain}/{model}"), 404)
+        if fmt not in ("csv", "json"):
+            return _err(ValueError(f"未知格式: {fmt}"), 400)
+        body = initial_state.template_text(domain, model, fmt)
+        fname = f"initial_state_{domain}_{model}.{fmt}"
+        return Response(body, mimetype="text/plain; charset=utf-8",
+                        headers={"Content-Disposition":
+                                 f'attachment; filename="{fname}"'})
+
+    @app.route("/api/initial-state/parse", methods=["POST"])
+    def initial_state_parse():
+        """Parse + validate pasted/uploaded JSON/CSV text.
+
+        Always answers 200 with an ``ok`` flag so the UI can list every row
+        error at once; genuine bad requests (unknown model) get 400.
+        """
+        data = _json()
+        dm = _dm_from_payload(data)
+        if dm[0] is None:
+            return _err(ValueError("未知领域或模型"), 400)
+        domain, model, config = dm
+        text = str(data.get("text", ""))
+        fmt = str(data.get("format", "csv")).lower()
+        parsed = initial_state.parse_layout_text(text, fmt)
+        if not parsed.ok:
+            return jsonify({"ok": False, "errors": [parsed.error],
+                            "warnings": []})
+        result = initial_state.validate_layout(domain, model, parsed.rows, config)
+        return jsonify({"ok": result.ok, "errors": result.errors,
+                        "warnings": result.warnings,
+                        "layout": result.layout,
+                        "counts": result.counts,
+                        "config_updates": result.config_updates})
+
+    @app.route("/api/initial-state/preview", methods=["POST"])
+    def initial_state_preview():
+        """Build the exact step-0 snapshot a run would use for this layout."""
+        data = _json()
+        dm = _dm_from_payload(data)
+        if dm[0] is None:
+            return _err(ValueError("未知领域或模型"), 400)
+        domain, model, config = dm
+        layout = data.get("layout")
+        if not isinstance(layout, list):
+            return _err(ValueError("缺少已校验的初始态 layout"), 400)
+        # Re-validate (the layout may have been tampered with client-side);
+        # the same validation runs again at scene save and run creation.
+        result = initial_state.validate_layout(domain, model, layout, config)
+        if not result.ok:
+            return jsonify({"error": "初始态校验失败", "details": result.errors}), 400
+        seed = data.get("seed")
+        seed = int(seed) if seed is not None else None
+        effective_config = {**config, **result.config_updates}
+        snapshot = initial_state.build_preview(
+            domain, model, effective_config, result.layout, seed=seed)
+        return jsonify({"ok": True, "snapshot": snapshot,
+                        "counts": result.counts,
+                        "config_updates": result.config_updates,
+                        "config": effective_config,
+                        "warnings": result.warnings})
+
+    # ------------------------------------------------------------------ #
     # Runs
     # ------------------------------------------------------------------ #
     @app.route("/api/runs", methods=["GET"])
@@ -132,6 +222,8 @@ def create_app() -> Flask:
                 scene_obj, name=data.get("name"),
                 seed=data.get("seed"),
                 snapshot_interval=int(data.get("snapshot_interval", 1)))
+        except ValueError as exc:
+            return _err(exc, 400)
         except Exception as exc:  # noqa: BLE001
             return _err(exc, 500)
         return jsonify(meta), 201

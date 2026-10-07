@@ -35,6 +35,40 @@
         <h3>参数</h3>
         <div id="fParams" class="grid grid-2"></div>
 
+        <h3>初始态导入（确定布局）</h3>
+        <p class="muted small" id="isHint">
+          默认由引擎按密度/数量随机生成。导入 JSON / CSV 后，个体的初始位置、状态、类型将完全确定，可复现、可复核；预览与真正运行的初始布局完全一致。
+        </p>
+        <div class="row gap-6" style="flex-wrap:wrap; align-items:center">
+          <label class="muted small">格式
+            <select id="isFormat" style="margin-left:4px">
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+            </select>
+          </label>
+          <input type="file" id="isFile" accept=".csv,.json,.txt" class="small">
+          <button class="btn small" id="isLoadSample">载入示例</button>
+          <a class="btn small" id="isDownload" href="#" download>下载模板</a>
+          <button class="btn small" id="isClear">清除初始态（恢复随机）</button>
+          <span class="badge ready" id="isStatus" style="display:none"></span>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <textarea id="isText" rows="6" spellcheck="false"
+            placeholder="粘贴 CSV / JSON，或选择文件载入；每行（条）一个个体。字段见上方模型示例。"></textarea>
+        </div>
+        <div class="row gap-6">
+          <button class="btn primary small" id="isValidate">导入并校验</button>
+          <span class="muted small" id="isSummary"></span>
+        </div>
+        <div id="isErrors" class="notice error" style="display:none; margin-top:8px; white-space:pre-wrap"></div>
+        <div id="isWarnings" class="notice warn" style="display:none; margin-top:8px; white-space:pre-wrap"></div>
+        <div id="isPreview" style="display:none; margin-top:10px">
+          <div class="muted small">初始态预览（保存并运行后第 0 步与此完全一致）：</div>
+          <canvas id="isCanvas" style="width:100%; margin-top:4px"></canvas>
+          <div class="legend" id="isLegend"></div>
+          <div id="isCounts" class="muted small" style="margin-top:6px"></div>
+        </div>
+
         <h3>定时干预措施</h3>
         <p class="muted small">干预将在运行到达「触发步」时自动施加。</p>
         <div id="fInterventions"></div>
@@ -51,6 +85,8 @@
 
   <script src="/js/api.js"></script>
   <script src="/js/common.js"></script>
+  <script src="/js/render.js"></script>
+  <script src="/js/initial_state_ui.js"></script>
   <script src="/js/config.js"></script>
 </body>
 </html>

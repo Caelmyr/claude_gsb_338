@@ -43,10 +43,19 @@ class EcologyABM(Engine):
         self.perception = float(self.config["perception"])
         self.boids: List[Dict[str, Any]] = []
         self.predators: List[Dict[str, Any]] = []
-        for i in range(int(self.config["n_boids"])):
-            self.boids.append(self._agent("boid", f"b{i:04d}"))
-        for i in range(int(self.config["n_predators"])):
-            self.predators.append(self._agent("predator", f"p{i:04d}"))
+        if self._initial_state is not None:
+            # Deterministic imported layout (positions + optional velocities).
+            for a in self._initial_state:
+                d = dict(a)
+                if d.get("type") == "predator":
+                    self.predators.append(d)
+                else:
+                    self.boids.append(d)
+        else:
+            for i in range(int(self.config["n_boids"])):
+                self.boids.append(self._agent("boid", f"b{i:04d}"))
+            for i in range(int(self.config["n_predators"])):
+                self.predators.append(self._agent("predator", f"p{i:04d}"))
         self._eaten = 0
         self._last_mean_neighbors = 0.0
 
@@ -216,8 +225,18 @@ class EcologyABM(Engine):
         p = itv.get("params", {})
         if t == "release_predators":
             count = int(p.get("count", 5))
-            for _ in range(count):
-                self.predators.append(self._agent("predator", f"p{len(self.predators):04d}"))
+            # Avoid colliding with imported predator ids.
+            used = {a.get("id") for a in self.predators}
+            added = 0
+            n = len(self.predators)
+            while added < count:
+                aid = f"p{n:04d}"
+                n += 1
+                if aid in used:
+                    continue
+                self.predators.append(self._agent("predator", aid))
+                used.add(aid)
+                added += 1
             return {"applied": True, "reason": f"投放了 {count} 只捕食者"}
         if t == "cull_foxes":
             k = self._cull_predators(float(p.get("fraction", 0.5)))

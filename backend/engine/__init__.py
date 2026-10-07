@@ -34,9 +34,15 @@ def available_engines() -> Dict[str, str]:
 
 
 def make_engine(domain: str, model: str, config: dict = None,
-                seed: int = None) -> base.Engine:
-    """Instantiate the engine registered for ``domain``/``model``."""
+                seed: int = None,
+                initial_state: list = None) -> base.Engine:
+    """Instantiate the engine registered for ``domain``/``model``.
+
+    When ``initial_state`` (a validated canonical individual layout) is given,
+    it replaces the engine's random initial population.
+    """
     key = f"{domain}/{model}"
     if key not in _REGISTRY:
         raise KeyError(f"unknown engine: {key}")
-    return _REGISTRY[key](config=config, seed=seed)
+    return _REGISTRY[key](config=config, seed=seed,
+                          initial_state=initial_state)

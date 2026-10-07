@@ -8,8 +8,15 @@ async function api(path, opts = {}) {
   const res = await fetch(path, options);
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
-    try { const j = await res.json(); msg = j.error || j.details || msg; } catch (e) { /* ignore */ }
-    throw new Error(msg);
+    let details = null;
+    try {
+      const j = await res.json();
+      details = j.details || null;
+      msg = j.error || (Array.isArray(details) ? details.join("\n") : details) || msg;
+    } catch (e) { /* ignore */ }
+    const err = new Error(Array.isArray(msg) ? msg.join("\n") : msg);
+    err.details = Array.isArray(details) ? details : null;
+    throw err;
   }
   if (res.status === 204) return null;
   const ct = res.headers.get("Content-Type") || "";

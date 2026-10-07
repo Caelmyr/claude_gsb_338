@@ -40,11 +40,28 @@ class EcologyCA(Engine):
         self.animals: List[Dict[str, Any]] = []
         self._id_counter = 0
 
-        # Seed grass across most of the lattice so rabbits can graze.
+        # Seed grass across most of the lattice so rabbits can graze.  This is
+        # deterministic in the seed even with an imported layout, so preview and
+        # run still agree (the layout only fixes animal positions).
         for y in range(h):
             for x in range(w):
                 if self._coin(0.6):
                     self.grass[y][x] = True
+
+        if self._initial_state is not None:
+            for a in self._initial_state:
+                d = dict(a)
+                self.animals.append(d)
+                self.occ[d["y"]][d["x"]] = len(self.animals) - 1
+            # Advance the spawn counter past every imported id's numeric suffix
+            # so animals born during the simulation never reuse an id.
+            max_id = 0
+            for d in self.animals:
+                suffix = "".join(ch for ch in str(d.get("id", "")) if ch.isdigit())
+                if suffix:
+                    max_id = max(max_id, int(suffix) + 1)
+            self._id_counter = max_id
+            return
 
         self._place("rabbit", int(self.config["n_rabbits"]),
                     int(self.config["rabbit_repro"]) // 2)

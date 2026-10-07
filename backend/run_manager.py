@@ -55,7 +55,19 @@ class RunManager:
         config = models.resolve_config(scene)
         if seed is None:
             seed = int(config.get("seed", 0))
-        engine = make_engine(scene.domain, scene.model, config=config, seed=seed)
+        # The deterministic imported layout (if any) overrides count/density
+        # seeding; sync its implied counts into the config for meta/experiments.
+        initial_state = None
+        if scene.initial_state:
+            from . import initial_state
+            result = initial_state.validate_layout(
+                scene.domain, scene.model, scene.initial_state, config)
+            if not result.ok:
+                raise ValueError("初始态校验失败: " + "；".join(result.errors))
+            config.update(result.config_updates)
+            initial_state = result.layout
+        engine = make_engine(scene.domain, scene.model, config=config, seed=seed,
+                             initial_state=initial_state)
         run_id = util.new_id("run")
         now = util.now_iso()
         meta: Dict[str, Any] = {
@@ -68,6 +80,8 @@ class RunManager:
             "config": config,
             "interventions": [{**i, "applied": False}
                               for i in scene.interventions],
+            "has_initial_state": initial_state is not None,
+            "initial_state": initial_state,
             "snapshot_interval": max(1, int(snapshot_interval)),
             "status": "ready",
             "current_step": 0,
@@ -209,7 +223,8 @@ class RunManager:
             _, meta = self._require(run_id)
             seed = meta.get("seed", 0)
             engine = make_engine(meta["domain"], meta["model"],
-                                 config=meta["config"], seed=seed)
+                                 config=meta["config"], seed=seed,
+                                 initial_state=meta.get("initial_state"))
             with self._lock:
                 self._engines[run_id] = engine
             for itv in meta["interventions"]:

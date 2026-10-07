@@ -46,6 +46,11 @@ class EpidemicABM(Engine):
         self._f_cure = 1.0
         self._last_new = 0
 
+        if self._initial_state is not None:
+            # Deterministic imported layout: the list is the whole population.
+            self.agents = [dict(a) for a in self._initial_state]
+            return
+
         n = int(self.config["n"])
         self.agents: List[Dict[str, Any]] = []
         for i in range(n):

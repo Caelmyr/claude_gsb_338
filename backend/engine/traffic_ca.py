@@ -27,15 +27,19 @@ class TrafficCA(Engine):
     def _init(self) -> None:
         self.lanes = int(self.config["lanes"])
         self.length = int(self.config["length"])
-        density = float(self.config["density"])
-        n = min(int(self.lanes * self.length * density),
-                self.lanes * self.length)
-        cells = self.rng.sample(range(self.lanes * self.length), n)
-        self._individuals = [
-            {"id": f"v{i:04d}", "type": "vehicle", "state": "stopped",
-             "x": c % self.length, "y": c // self.length, "v": 0}
-            for i, c in enumerate(cells)
-        ]
+        if self._initial_state is not None:
+            # Deterministic imported layout: one vehicle per occupied cell.
+            self._individuals = [dict(v) for v in self._initial_state]
+        else:
+            density = float(self.config["density"])
+            n = min(int(self.lanes * self.length * density),
+                    self.lanes * self.length)
+            cells = self.rng.sample(range(self.lanes * self.length), n)
+            self._individuals = [
+                {"id": f"v{i:04d}", "type": "vehicle", "state": "stopped",
+                 "x": c % self.length, "y": c // self.length, "v": 0}
+                for i, c in enumerate(cells)
+            ]
         self._slow_zones: List[Tuple[int, int]] = []
         self._last_flow = 0
 

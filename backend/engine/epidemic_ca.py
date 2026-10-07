@@ -45,6 +45,16 @@ class EpidemicCA(Engine):
         self._f_cure = 1.0
         self._last_new = 0
 
+        if self._initial_state is not None:
+            # Deterministic imported layout: listed cells override the default
+            # all-susceptible lattice (every cell always holds one person).
+            _code = {"susceptible": 0, "infected": 1, "recovered": 2}
+            for a in self._initial_state:
+                x, y = int(a["x"]), int(a["y"])
+                self.state[y][x] = _code[a["state"]]
+                self.days[y][x] = int(a.get("days", 0))
+            return
+
         cells = list(range(w * h))
         self.rng.shuffle(cells)
         for c in cells[:int(self.config["initial_infected"])]:

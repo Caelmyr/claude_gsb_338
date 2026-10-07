@@ -32,17 +32,23 @@ class TrafficABM(Engine):
     # ------------------------------------------------------------------ #
     def _init(self) -> None:
         L = float(self.config["road_length"])
-        n = int(self.config["n"])
         veh_len = float(self.config["length"])
-        spacing = L / n if n else L
-        vehicles: List[Dict[str, Any]] = []
-        for i in range(n):
-            x = (i * spacing + self.rng.uniform(-0.3 * spacing, 0.3 * spacing)) % L
-            vehicles.append({"id": f"v{i:04d}", "type": "vehicle",
-                             "state": "stopped", "x": round(x, 2), "y": 0.0,
-                             "v": 0.0})
-        vehicles.sort(key=lambda v: v["x"])
-        self._individuals = vehicles
+        if self._initial_state is not None:
+            # Deterministic imported layout, already checked for overlap.
+            vehicles = [dict(v) for v in self._initial_state]
+            vehicles.sort(key=lambda v: v["x"])
+            self._individuals = vehicles
+        else:
+            n = int(self.config["n"])
+            spacing = L / n if n else L
+            vehicles: List[Dict[str, Any]] = []
+            for i in range(n):
+                x = (i * spacing + self.rng.uniform(-0.3 * spacing, 0.3 * spacing)) % L
+                vehicles.append({"id": f"v{i:04d}", "type": "vehicle",
+                                 "state": "stopped", "x": round(x, 2), "y": 0.0,
+                                 "v": 0.0})
+            vehicles.sort(key=lambda v: v["x"])
+            self._individuals = vehicles
         self._veh_len = veh_len
         self._base = dict(self.config)  # remember original params for interventions
         self._slow_segments: List[Tuple[float, float]] = []
@@ -93,7 +99,7 @@ class TrafficABM(Engine):
     def stats(self) -> Dict[str, Any]:
         n = len(self._individuals)
         if n == 0:
-            return {"mean_speed": 0, "flow": 0, "density": 0,
+            return {"mean_speed": 0, "flow": self._last_flow, "density": 0,
                     "stopped": 0, "speed_std": 0}
         speeds = [v["v"] for v in self._individuals]
         mean = sum(speeds) / n
