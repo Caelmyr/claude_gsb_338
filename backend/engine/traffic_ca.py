@@ -19,7 +19,8 @@ class TrafficCA(Engine):
     domain = "traffic"
     model = "ca"
 
-    def defaults(self) -> Dict[str, Any]:
+    @classmethod
+    def defaults(cls) -> Dict[str, Any]:
         return {"lanes": 3, "length": 80, "vmax": 5, "p_slow": 0.15,
                 "density": 0.2, "lane_change": True}
 
@@ -27,15 +28,21 @@ class TrafficCA(Engine):
     def _init(self) -> None:
         self.lanes = int(self.config["lanes"])
         self.length = int(self.config["length"])
-        density = float(self.config["density"])
-        n = min(int(self.lanes * self.length * density),
-                self.lanes * self.length)
-        cells = self.rng.sample(range(self.lanes * self.length), n)
-        self._individuals = [
-            {"id": f"v{i:04d}", "type": "vehicle", "state": "stopped",
-             "x": c % self.length, "y": c // self.length, "v": 0}
-            for i, c in enumerate(cells)
-        ]
+        imported = self.config.get("initial_state")
+        if imported:
+            # Imported initial state replaces random placement entirely;
+            # copy so the engine never mutates the scene config.
+            self._individuals = [dict(v) for v in imported]
+        else:
+            density = float(self.config["density"])
+            n = min(int(self.lanes * self.length * density),
+                    self.lanes * self.length)
+            cells = self.rng.sample(range(self.lanes * self.length), n)
+            self._individuals = [
+                {"id": f"v{i:04d}", "type": "vehicle", "state": "stopped",
+                 "x": c % self.length, "y": c // self.length, "v": 0}
+                for i, c in enumerate(cells)
+            ]
         self._slow_zones: List[Tuple[int, int]] = []
         self._last_flow = 0
 

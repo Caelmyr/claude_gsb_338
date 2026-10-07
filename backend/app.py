@@ -14,7 +14,8 @@ from typing import Any, Dict
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
 
-from . import catalog, export, models, report, storage, util
+from . import catalog, export, initial_state, models, report, storage, util
+from .engine import make_engine
 from .run_manager import manager
 
 FRONTEND_DIR = os.path.join(
@@ -109,6 +110,55 @@ def create_app() -> Flask:
         if not storage.delete_scene(scene_id):
             return _err(KeyError(f"scene not found: {scene_id}"), 404)
         return jsonify({"deleted": scene_id})
+
+    # ------------------------------------------------------------------ #
+    # Initial-state import (validate + preview + templates)
+    # ------------------------------------------------------------------ #
+    @app.route("/api/initial-state/validate", methods=["POST"])
+    def validate_initial_state():
+        """Validate pasted JSON/CSV and preview the exact step-0 layout.
+
+        The preview is the real engine's step-0 snapshot built from the
+        normalized import, so what the config page shows is bit-for-bit what
+        a run created from the same scene will start with.
+        """
+        data = _json()
+        domain = str(data.get("domain", ""))
+        model = str(data.get("model", ""))
+        if not catalog.known_model(domain, model):
+            return _err(ValueError(f"未知领域/模型: {domain}/{model}"), 400)
+        config = {**catalog.model_defaults(domain, model),
+                  **(data.get("config") or {})}
+        config.pop("initial_state", None)
+        result = initial_state.validate_import(
+            domain, model, config, str(data.get("text", "")),
+            str(data.get("format", "auto")))
+        if result["ok"]:
+            seed = data.get("seed")
+            if seed is None:
+                seed = int(config.get("seed", 0) or 0)
+            engine = make_engine(
+                domain, model,
+                config={**config, "initial_state": result["individuals"]},
+                seed=int(seed))
+            result["snapshot"] = engine.snapshot()
+        return jsonify(result)
+
+    @app.route("/api/initial-state/template")
+    def initial_state_template():
+        domain = request.args.get("domain", "")
+        model = request.args.get("model", "")
+        fmt = request.args.get("format", "json")
+        if not catalog.known_model(domain, model):
+            return _err(ValueError(f"未知领域/模型: {domain}/{model}"), 400)
+        if fmt not in ("json", "csv"):
+            return _err(ValueError(f"未知格式: {fmt}"), 400)
+        config = catalog.model_defaults(domain, model)
+        return jsonify({
+            "format": fmt,
+            "text": initial_state.template(domain, model, fmt),
+            "fields": initial_state.schema_doc(domain, model, config),
+        })
 
     # ------------------------------------------------------------------ #
     # Runs

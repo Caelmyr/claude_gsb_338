@@ -25,7 +25,8 @@ class TrafficABM(Engine):
     domain = "traffic"
     model = "abm"
 
-    def defaults(self) -> Dict[str, Any]:
+    @classmethod
+    def defaults(cls) -> Dict[str, Any]:
         return {"road_length": 1000.0, "n": 40, "v0": 30.0, "T": 1.5,
                 "a": 1.5, "b": 2.0, "s0": 2.0, "dt": 0.5, "length": 5.0}
 
@@ -34,14 +35,20 @@ class TrafficABM(Engine):
         L = float(self.config["road_length"])
         n = int(self.config["n"])
         veh_len = float(self.config["length"])
-        spacing = L / n if n else L
-        vehicles: List[Dict[str, Any]] = []
-        for i in range(n):
-            x = (i * spacing + self.rng.uniform(-0.3 * spacing, 0.3 * spacing)) % L
-            vehicles.append({"id": f"v{i:04d}", "type": "vehicle",
-                             "state": "stopped", "x": round(x, 2), "y": 0.0,
-                             "v": 0.0})
-        vehicles.sort(key=lambda v: v["x"])
+        imported = self.config.get("initial_state")
+        if imported:
+            # Imported initial state (already sorted by x by the validator).
+            vehicles = sorted((dict(v) for v in imported),
+                              key=lambda v: v["x"])
+        else:
+            spacing = L / n if n else L
+            vehicles = []
+            for i in range(n):
+                x = (i * spacing + self.rng.uniform(-0.3 * spacing, 0.3 * spacing)) % L
+                vehicles.append({"id": f"v{i:04d}", "type": "vehicle",
+                                 "state": "stopped", "x": round(x, 2), "y": 0.0,
+                                 "v": 0.0})
+            vehicles.sort(key=lambda v: v["x"])
         self._individuals = vehicles
         self._veh_len = veh_len
         self._base = dict(self.config)  # remember original params for interventions

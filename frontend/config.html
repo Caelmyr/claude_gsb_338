@@ -35,6 +35,32 @@
         <h3>参数</h3>
         <div id="fParams" class="grid grid-2"></div>
 
+        <h3>初始态导入（可选）</h3>
+        <p class="muted small">从 JSON / CSV 导入个体的初始位置、状态与类型，作为场景的确定初始态；导入后将完全替代按密度 / 数量的随机初始化。校验通过后可预览，预览即为正式运行第 0 步的真实布局。</p>
+        <div class="row" style="margin-bottom:8px">
+          <select id="isFormat" style="max-width:130px">
+            <option value="auto">自动识别格式</option>
+            <option value="json">JSON</option>
+            <option value="csv">CSV</option>
+          </select>
+          <input type="file" id="isFile" accept=".json,.csv,.txt" style="max-width:260px">
+          <button class="btn small" id="isTemplate">下载模板</button>
+          <button class="btn small" id="isFields">字段说明</button>
+        </div>
+        <textarea id="isText" rows="6" placeholder='粘贴 JSON（[{"x":1,"y":0,"state":"infected"}, …]）或 CSV（首行为表头）'></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="btn primary small" id="isValidate">校验并预览</button>
+          <button class="btn danger small" id="isClear">清除导入</button>
+          <span class="muted small" id="isHint"></span>
+        </div>
+        <div id="isFieldsBox" style="display:none; margin-top:10px"></div>
+        <div id="isErrors" style="margin-top:10px"></div>
+        <div id="isPreviewBox" style="display:none; margin-top:12px">
+          <div class="canvas-wrap"><canvas id="isPreview"></canvas></div>
+          <div class="legend" id="isLegend"></div>
+          <p class="muted small" id="isSummary"></p>
+        </div>
+
         <h3>定时干预措施</h3>
         <p class="muted small">干预将在运行到达「触发步」时自动施加。</p>
         <div id="fInterventions"></div>
@@ -51,6 +77,7 @@
 
   <script src="/js/api.js"></script>
   <script src="/js/common.js"></script>
+  <script src="/js/render.js"></script>
   <script src="/js/config.js"></script>
 </body>
 </html>

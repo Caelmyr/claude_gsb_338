@@ -25,7 +25,8 @@ class EpidemicCA(Engine):
     domain = "epidemic"
     model = "ca"
 
-    def defaults(self) -> Dict[str, Any]:
+    @classmethod
+    def defaults(cls) -> Dict[str, Any]:
         return {"width": 50, "height": 50, "beta": 0.4, "gamma": 0.1,
                 "initial_infected": 5, "vaccination_rate": 0.0}
 
@@ -45,18 +46,27 @@ class EpidemicCA(Engine):
         self._f_cure = 1.0
         self._last_new = 0
 
-        cells = list(range(w * h))
-        self.rng.shuffle(cells)
-        for c in cells[:int(self.config["initial_infected"])]:
-            y, x = divmod(c, w)
-            self.state[y][x] = 1
-        vax = float(self.config["vaccination_rate"])
-        if vax > 0:
-            rest = cells[int(self.config["initial_infected"]):]
-            k = int(len(rest) * vax)
-            for c in rest[:k]:
+        imported = self.config.get("initial_state")
+        if imported:
+            # Imported initial state: each record sets one lattice cell;
+            # cells not mentioned stay susceptible.
+            code = {"susceptible": 0, "infected": 1, "recovered": 2}
+            for e in imported:
+                self.state[e["y"]][e["x"]] = code[e["state"]]
+                self.days[e["y"]][e["x"]] = int(e.get("days", 0))
+        else:
+            cells = list(range(w * h))
+            self.rng.shuffle(cells)
+            for c in cells[:int(self.config["initial_infected"])]:
                 y, x = divmod(c, w)
-                self.state[y][x] = 2
+                self.state[y][x] = 1
+            vax = float(self.config["vaccination_rate"])
+            if vax > 0:
+                rest = cells[int(self.config["initial_infected"]):]
+                k = int(len(rest) * vax)
+                for c in rest[:k]:
+                    y, x = divmod(c, w)
+                    self.state[y][x] = 2
 
     # ------------------------------------------------------------------ #
     def _infected_neighbors(self, x: int, y: int) -> int:

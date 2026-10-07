@@ -21,7 +21,8 @@ class EcologyCA(Engine):
     domain = "ecology"
     model = "ca"
 
-    def defaults(self) -> Dict[str, Any]:
+    @classmethod
+    def defaults(cls) -> Dict[str, Any]:
         return {
             "width": 60, "height": 60, "n_rabbits": 300, "n_foxes": 60,
             "grass_growth": 0.05, "rabbit_repro": 8, "fox_repro": 12,
@@ -39,6 +40,7 @@ class EcologyCA(Engine):
         self.occ: List[List[int]] = [[-1] * w for _ in range(h)]
         self.animals: List[Dict[str, Any]] = []
         self._id_counter = 0
+        self._used_ids: set = set()
 
         # Seed grass across most of the lattice so rabbits can graze.
         for y in range(h):
@@ -46,10 +48,16 @@ class EcologyCA(Engine):
                 if self._coin(0.6):
                     self.grass[y][x] = True
 
-        self._place("rabbit", int(self.config["n_rabbits"]),
-                    int(self.config["rabbit_repro"]) // 2)
-        self._place("fox", int(self.config["n_foxes"]),
-                    int(self.config["fox_repro"]) // 2)
+        imported = self.config.get("initial_state")
+        if imported:
+            # Imported initial state replaces random placement entirely.
+            for a in imported:
+                self._spawn_imported(a)
+        else:
+            self._place("rabbit", int(self.config["n_rabbits"]),
+                        int(self.config["rabbit_repro"]) // 2)
+            self._place("fox", int(self.config["n_foxes"]),
+                        int(self.config["fox_repro"]) // 2)
 
     def _place(self, typ: str, count: int, energy: int) -> None:
         empties = self._empty_cells()
@@ -59,11 +67,24 @@ class EcologyCA(Engine):
 
     def _spawn(self, typ: str, x: int, y: int, energy: int) -> None:
         prefix = "rb" if typ == "rabbit" else "fx"
-        a = {"id": f"{prefix}{self._id_counter:05d}", "type": typ,
+        aid = f"{prefix}{self._id_counter:05d}"
+        while aid in self._used_ids:  # never collide with imported ids
+            self._id_counter += 1
+            aid = f"{prefix}{self._id_counter:05d}"
+        a = {"id": aid, "type": typ,
              "state": typ, "x": x, "y": y, "energy": energy, "age": 0}
         self._id_counter += 1
+        self._used_ids.add(aid)
         self.animals.append(a)
         self.occ[y][x] = len(self.animals) - 1
+
+    def _spawn_imported(self, a: Dict[str, Any]) -> None:
+        """Place one imported animal, keeping its id and energy."""
+        animal = {"id": a["id"], "type": a["type"], "state": a["type"],
+                  "x": a["x"], "y": a["y"], "energy": a["energy"], "age": 0}
+        self._used_ids.add(a["id"])
+        self.animals.append(animal)
+        self.occ[a["y"]][a["x"]] = len(self.animals) - 1
 
     def _empty_cells(self) -> List[Tuple[int, int]]:
         return [(x, y) for y in range(self.height) for x in range(self.width)

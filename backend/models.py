@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from . import catalog, util
+from . import catalog, initial_state, util
 
 
 @dataclass
@@ -141,6 +141,13 @@ def validate_scene(scene: Scene) -> List[str]:
                 errors.append("干预措施缺少 type 字段")
             elif itv["type"] not in known:
                 errors.append(f"未知干预措施: {itv.get('type')}")
+
+    # An imported initial state must stay consistent with the current config
+    # (bounds, capacities, population size) — re-validate it on every save.
+    init_state = merged.get("initial_state")
+    if init_state is not None:
+        errors.extend(initial_state.validate_stored(
+            scene.domain, scene.model, merged, init_state))
     return errors
 
 

@@ -25,7 +25,8 @@ class EpidemicABM(Engine):
     domain = "epidemic"
     model = "abm"
 
-    def defaults(self) -> Dict[str, Any]:
+    @classmethod
+    def defaults(cls) -> Dict[str, Any]:
         return {"width": 400, "height": 400, "n": 800, "beta": 0.3,
                 "gamma": 0.05, "speed": 2.0, "radius": 6.0,
                 "initial_infected": 10, "vaccination_rate": 0.0,
@@ -48,26 +49,40 @@ class EpidemicABM(Engine):
 
         n = int(self.config["n"])
         self.agents: List[Dict[str, Any]] = []
-        for i in range(n):
-            a = {"id": f"p{i:05d}", "type": "person", "state": "susceptible",
-                 "x": self.rng.uniform(0, self.width),
-                 "y": self.rng.uniform(0, self.height),
-                 "heading": self.rng.uniform(0, 2 * math.pi), "days": 0}
-            if self._movement == "home_range":
-                a["hx"] = a["x"]
-                a["hy"] = a["y"]
-                a["hr"] = self.rng.uniform(20, 80)
-            self.agents.append(a)
+        imported = self.config.get("initial_state")
+        if imported:
+            # Imported initial state replaces the random population entirely.
+            for e in imported:
+                a = {"id": e["id"], "type": "person", "state": e["state"],
+                     "x": e["x"], "y": e["y"],
+                     "heading": e.get("heading", 0.0),
+                     "days": int(e.get("days", 0))}
+                if self._movement == "home_range":
+                    a["hx"] = a["x"]
+                    a["hy"] = a["y"]
+                    a["hr"] = self.rng.uniform(20, 80)
+                self.agents.append(a)
+        else:
+            for i in range(n):
+                a = {"id": f"p{i:05d}", "type": "person", "state": "susceptible",
+                     "x": self.rng.uniform(0, self.width),
+                     "y": self.rng.uniform(0, self.height),
+                     "heading": self.rng.uniform(0, 2 * math.pi), "days": 0}
+                if self._movement == "home_range":
+                    a["hx"] = a["x"]
+                    a["hy"] = a["y"]
+                    a["hr"] = self.rng.uniform(20, 80)
+                self.agents.append(a)
 
-        self.rng.shuffle(self.agents)
-        for a in self.agents[:int(self.config["initial_infected"])]:
-            a["state"] = "infected"
-        vax = float(self.config["vaccination_rate"])
-        if vax > 0:
-            susc = [a for a in self.agents if a["state"] == "susceptible"]
-            self.rng.shuffle(susc)
-            for a in susc[:int(len(susc) * vax)]:
-                a["state"] = "recovered"
+            self.rng.shuffle(self.agents)
+            for a in self.agents[:int(self.config["initial_infected"])]:
+                a["state"] = "infected"
+            vax = float(self.config["vaccination_rate"])
+            if vax > 0:
+                susc = [a for a in self.agents if a["state"] == "susceptible"]
+                self.rng.shuffle(susc)
+                for a in susc[:int(len(susc) * vax)]:
+                    a["state"] = "recovered"
 
     def individuals(self) -> List[Dict[str, Any]]:
         return self.agents

@@ -8,7 +8,14 @@ async function api(path, opts = {}) {
   const res = await fetch(path, options);
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
-    try { const j = await res.json(); msg = j.error || j.details || msg; } catch (e) { /* ignore */ }
+    try {
+      const j = await res.json();
+      msg = j.error || j.details || msg;
+      if (j.error && Array.isArray(j.details) && j.details.length) {
+        const shown = j.details.slice(0, 5).join("；");
+        msg += `：${shown}${j.details.length > 5 ? `；…共 ${j.details.length} 项` : ""}`;
+      }
+    } catch (e) { /* ignore */ }
     throw new Error(msg);
   }
   if (res.status === 204) return null;

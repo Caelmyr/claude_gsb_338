@@ -31,7 +31,8 @@ class EcologyABM(Engine):
     domain = "ecology"
     model = "abm"
 
-    def defaults(self) -> Dict[str, Any]:
+    @classmethod
+    def defaults(cls) -> Dict[str, Any]:
         return {"width": 400, "height": 400, "n_boids": 150, "n_predators": 3,
                 "max_speed": 4.0, "pred_speed": 4.5, "perception": 40.0,
                 "separation": 30.0, "flee_radius": 60.0}
@@ -43,10 +44,20 @@ class EcologyABM(Engine):
         self.perception = float(self.config["perception"])
         self.boids: List[Dict[str, Any]] = []
         self.predators: List[Dict[str, Any]] = []
-        for i in range(int(self.config["n_boids"])):
-            self.boids.append(self._agent("boid", f"b{i:04d}"))
-        for i in range(int(self.config["n_predators"])):
-            self.predators.append(self._agent("predator", f"p{i:04d}"))
+        imported = self.config.get("initial_state")
+        if imported:
+            # Imported initial state replaces random placement entirely.
+            for a in imported:
+                rec = dict(a)
+                if rec["type"] == "boid":
+                    self.boids.append(rec)
+                else:
+                    self.predators.append(rec)
+        else:
+            for i in range(int(self.config["n_boids"])):
+                self.boids.append(self._agent("boid", f"b{i:04d}"))
+            for i in range(int(self.config["n_predators"])):
+                self.predators.append(self._agent("predator", f"p{i:04d}"))
         self._eaten = 0
         self._last_mean_neighbors = 0.0
 

@@ -7,7 +7,7 @@ chain, and so the catalog can stay declarative.
 
 from __future__ import annotations
 
-from typing import Dict, Type
+from typing import Any, Dict, Type
 
 from . import base
 from .epidemic_abm import EpidemicABM
@@ -31,6 +31,14 @@ _REGISTRY: Dict[str, Type[base.Engine]] = {
 def available_engines() -> Dict[str, str]:
     """Map ``"domain/model"`` -> class name, for introspection/debugging."""
     return {key: cls.__name__ for key, cls in _REGISTRY.items()}
+
+
+def engine_defaults(domain: str, model: str) -> Dict[str, Any]:
+    """The engine class's own fallback defaults for ``domain``/``model``."""
+    key = f"{domain}/{model}"
+    if key not in _REGISTRY:
+        raise KeyError(f"unknown engine: {key}")
+    return dict(_REGISTRY[key].defaults())
 
 
 def make_engine(domain: str, model: str, config: dict = None,
